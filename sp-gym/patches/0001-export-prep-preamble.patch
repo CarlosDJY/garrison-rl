@@ -1,0 +1,11 @@
+diff --git a/server/match/bot.js b/server/match/bot.js
+index dd345f1..6446d4e 100644
+--- a/server/match/bot.js
++++ b/server/match/bot.js
+@@ -4875,3 +4875,6 @@ export function botUseCommand(m, ps, battleMarks = false) {
+   }
+   return !!ps.useCommand(view.effectId, target).ok;
+ }
++
++// sp-gym (local): the prep preamble pieces, for an environment that lets a policy shop before the legacy layout.
++export { selfPlan as _spSelfPlan, pagerUse as _spPagerUse };

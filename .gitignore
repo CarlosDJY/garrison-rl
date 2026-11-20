@@ -1,0 +1,16 @@
+# The simulator (cloned next to the code, see README) and local tools
+/Stronghold-Protocol/
+/_tools/
+node_modules/
+
+# Data, checkpoints, logs
+python/garrison_rl/data/
+python/garrison_rl/runs/*
+!python/garrison_rl/runs/*.sh
+*.pt
+*.out
+*.jsonl
+
+__pycache__/
+*.pyc
+*.new
