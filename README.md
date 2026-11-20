@@ -77,6 +77,27 @@ export ASP_SP_PER_PROC=4
 
 之后的流程是：`sp_record.py` 录制自带 AI 的对局，`sp_bc.py` 模仿学习得到起点，`train_mix.py --sim sp ...` 做 PPO。具体参数见 `python/garrison_rl/runs/run_sp*.sh`。这些启动脚本里写的是开发机上的绝对路径，使用前需要改成自己的。
 
+## 训练好的模型
+
+模型存档放在 [Releases](https://github.com/CarlosDJY/garrison-rl/releases) 页面，不在代码仓库里。每个文件约 10 MB，是策略网络的权重。
+
+| 文件 | 说明 |
+|---|---|
+| `sp_bc.pt` | 模仿模拟器自带 AI 得到的起点 |
+| `sp2.pt` | 在起点上做 PPO，300 次更新。训练时策略由自带 AI 自选，没有指定盟约 |
+| `sp3.pt` | 在 sp2 上继续 150 次更新，训练时固定三个策略并指定主盟约。上面结果表里的 sp3 |
+
+存档只和训练时的模拟器版本（上面的提交号）配套：干员、盟约、装备的编号顺序来自那个版本。使用前先生成一份目录文件，再评估：
+
+```bash
+cd python/garrison_rl
+python sp_spec.py                      # 写出 runs/sp_bc/spec.json
+python sp_band_eval.py --ckpt path/to/sp3.pt --bands band_amiya,band_takecare,band_bonus \
+  --levels 14,20 --runs 128 --extra="--sp:focus=kjeragShip,ursusShip,lethaniaShip,egirShip,victoriaShip,sargonShip"
+```
+
+`--ckpt` 的路径相对于 `python/garrison_rl`。sp3 是按"给定主盟约"训练的，评估时要带上 `--sp:focus`；sp2 和 sp_bc 不需要。
+
 ## 许可与声明
 
 - 本仓库以 GPL-3.0 发布（见 `LICENSE`）。环境脚本直接调用 Stronghold-Protocol 的代码，后者同样是 GPL-3.0。
