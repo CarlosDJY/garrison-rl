@@ -42,6 +42,9 @@ const FOCUS = arg('--focus') ? String(arg('--focus')).split(',').filter(Boolean)
 // {...}} (no reply) sets how the two are drawn from then on: for the match's leader, in proportion to the weights
 // given (the trainer's: each 盟约's recent win rate against that leader, with a floor); without weights, evenly.
 const SECOND = arg('--second') ? String(arg('--second')).split(',').filter(Boolean) : null;
+// --band-focus band=盟约,...: a match played with that 策略 is always given that 盟约 as its main (when the match has it
+// on) instead of a drawn one — for a 策略 tied to one 盟约 (克莱门莎: 阿戈尔). Its info carries fixed: 1.
+const BAND_FOCUS = new Map((arg('--band-focus') ? String(arg('--band-focus')).split(',') : []).filter(Boolean).map((x) => x.split('=')));
 let WEIGHTS = null;
 function drawBond(list, table, bossId, u) {
   if (!list.length) return null;
@@ -110,12 +113,14 @@ function designate(slot, m, ps) {
     const gd = ps.gd || m.gd;
     const live = (id) => !gd.modeInactiveBonds.has(id) && (!gd.regulationBondDraw || m.bondPlayable(id));
     const on = FOCUS.filter((id) => gd.bond(id)?.isCore && live(id));
+    const tied = BAND_FOCUS.get(ps.bandId);
+    slot.fixed = tied && gd.bond(tied)?.isCore && live(tied) ? 1 : 0;
     if (WEIGHTS || SECOND) {
-      slot.focus = drawBond(on, WEIGHTS?.main, m.bossId, bandHash(slot.seed ^ 0x5bd1e995) / 4294967296);
+      slot.focus = slot.fixed ? tied : drawBond(on, WEIGHTS?.main, m.bossId, bandHash(slot.seed ^ 0x5bd1e995) / 4294967296);
       slot.second = SECOND ? drawBond(SECOND.filter((id) => gd.bond(id) && live(id) && id !== slot.focus), WEIGHTS?.second, m.bossId,
         bandHash(slot.seed ^ 0x2545f491) / 4294967296) : null;
     } else {
-      slot.focus = on.length ? on[bandHash(slot.seed ^ 0x5bd1e995) % on.length] : null;
+      slot.focus = slot.fixed ? tied : on.length ? on[bandHash(slot.seed ^ 0x5bd1e995) % on.length] : null;
       slot.second = null;
     }
   }
@@ -203,7 +208,19 @@ function newMatch(slot, seed, teacher) {
   slot.m = new Match({ roomCode: 'GYM', mode: 'solo', difficulty: DIFFICULTY, modeId: MODE_ID, seats, seed, data, log, scheduler: sched,
     botRehearsal: REHEARSAL, botStrategy: strategy, botStrategySeats: {}, send: () => true, broadcast: () => {},
     onEnd: (s) => { slot.summary = s; slot.ended = true; } });
-  if (BANDS) slot.m.botBands.set('ai_0', BANDS[bandHash(seed) % BANDS.length]);
+  if (BANDS) {
+    // a 策略 tied to one 盟约 (--band-focus) is only played when the match has that 盟约 on; otherwise one of the others
+    const m0 = slot.m, gd0 = m0.gd, h = bandHash(seed);
+    // (solo 规程: the core 盟约 come in two groups and the game AI takes the first — settled only in INFO_CHECK, after this)
+    const on0 = (id) => !!gd0.bond(id) && !gd0.modeInactiveBonds.has(id)
+      && (m0.bondChoice?.groups ? m0.bondChoice.groups[0].includes(id) : (!gd0.regulationBondDraw || m0.bondPlayable(id)));
+    let band = BANDS[h % BANDS.length];
+    if (BAND_FOCUS.has(band) && !on0(BAND_FOCUS.get(band))) {
+      const free = BANDS.filter((x) => !BAND_FOCUS.has(x));
+      if (free.length) band = free[bandHash(h ^ 0x9e3779b9) % free.length];
+    }
+    m0.botBands.set('ai_0', band);
+  }
   slot.ps = slot.m.players.get('ai_0');
   if (PICKER && !teacher) {
     const m = slot.m;
@@ -409,7 +426,7 @@ function infoOf(slot) {
   const lineup = p?.lineup || [];
   return { cleared: !!s?.victory, hiddenCore: s ? (s.hiddenReached ? !!s.hiddenCleared : null) : null, rounds: s?.roundsPassed ?? slot.round, hp: s?.teamLp ?? 0,
     level: ps?.shop?.level ?? 0, dpsRatio: 0, elites: ps ? ps.allChess().filter((q) => m.gd.isGolden(q.id)).length : lineup.filter((x) => x.golden).length,
-    layers: bonds.slice(0, 4), gains: slot.gains, losses: slot.losses, band: p?.bandId ?? null, boss: s?.bossId ?? null, seed: slot.seed, focus: slot.focus ?? null, second: slot.second ?? null,
+    layers: bonds.slice(0, 4), gains: slot.gains, losses: slot.losses, band: p?.bandId ?? null, boss: s?.bossId ?? null, seed: slot.seed, focus: slot.focus ?? null, second: slot.second ?? null, fixed: slot.fixed || 0,
     stuck: !!slot.stuck, errors: slot.errors, plan: planInfo(slot, m, ps) };
 }
 /** How far the run got with the 盟约 it was given (--focus): its different members held and those 精锐, each as a share

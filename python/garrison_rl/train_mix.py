@@ -54,7 +54,7 @@ class DrawTable:
         return "hi" if int(level) >= 16 else "lo"
 
     def add(self, level, info):
-        if info.get("focus") and info.get("boss"):
+        if info.get("focus") and info.get("boss") and not info.get("fixed"):   # a 策略-tied main was not drawn
             self.rows[self.tier(level)].append((info["boss"], info["focus"], info.get("second"), 1.0 if info.get("cleared") else 0.0))
 
     def rates(self, tier, kind):
@@ -134,6 +134,7 @@ DRAW_BEST = False  # evaluate(): every leader's best 盟约 instead of a draw
 
 def evaluate(model, enc, mode, device, runs, seed, extra, fighter=None):
     res = [None] * runs
+    evaluate.infos = res   # the runs' end infos, for whoever wants more than the averages
     model.eval()
     if os.environ.get("ASP_SIM") == "sp" and os.environ.get("ASP_SP_ASYNC", "1") != "0":
         # The simulator processes step apart (as in training): the same runs and results, without every step waiting
@@ -300,6 +301,8 @@ def main():
     ap.add_argument("--async-steps", type=int, default=1,
                     help="--sim sp: the simulator processes step apart instead of waiting for the slowest each step (0: together)")
     ap.add_argument("--async-wait", type=float, default=0.02, help="--async-steps: seconds to gather further replies for one pass through the network")
+    ap.add_argument("--sp-band-focus", default=None,
+                    help="--sim sp: 策略=盟约,... — a match with that 策略 is always given that 盟约 as its main (克莱门莎: 阿戈尔)")
     ap.add_argument("--sp-focus", default=None,
                     help="--sim sp: every match (training and evaluation) is given one of these core 盟约 ids (comma separated) as its "
                          "main, evenly: the plan the policy sees and the main the layout works for; --r-plan pays for following it")
@@ -401,6 +404,8 @@ def main():
             gym_extra.append(f"--sp:focus={args.sp_focus}")
         if args.sp_second:
             gym_extra.append(f"--sp:second={args.sp_second}")
+        if args.sp_band_focus:
+            gym_extra.append(f"--sp:band-focus={args.sp_band_focus}")
         if args.sp_fights:
             fp = args.sp_fights if os.path.isabs(args.sp_fights) else os.path.join(os.path.dirname(os.path.abspath(__file__)), args.sp_fights)
             os.makedirs(os.path.dirname(fp), exist_ok=True)
@@ -776,7 +781,7 @@ def main():
                 print(f"  after refresh: {mem_str()}", flush=True)
             if upd % args.eval_every == 0:
                 fighter.record = False
-                res = {m: evaluate(model, enc, m, device, args.eval_runs, args.sel_seed, ([f"--sp:bands={args.sp_bands}"] if args.sp_bands else []) + ([f"--sp:focus={args.sp_focus}"] if args.sp_focus else []) + ([f"--sp:second={args.sp_second}"] if args.sp_second else []) if sp else ["--no-flying"] + plan_flag, fighter) for m in modes}
+                res = {m: evaluate(model, enc, m, device, args.eval_runs, args.sel_seed, ([f"--sp:bands={args.sp_bands}"] if args.sp_bands else []) + ([f"--sp:focus={args.sp_focus}"] if args.sp_focus else []) + ([f"--sp:second={args.sp_second}"] if args.sp_second else []) + ([f"--sp:band-focus={args.sp_band_focus}"] if args.sp_band_focus else []) if sp else ["--no-flying"] + plan_flag, fighter) for m in modes}
                 fighter.record = True
                 mean_clear = float(np.mean([c for c, *_ in res.values()]))
                 if DRAW is not None:
