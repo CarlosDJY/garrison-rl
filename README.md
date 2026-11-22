@@ -161,7 +161,7 @@ python sp_spec.py      # 写出 runs/sp_bc/spec.json，评估和训练都要用
 完整流程是：`sp_record.py` 录制自带 AI 的对局，`sp_bc.py` 模仿学习得到起点，`train_mix.py --sim sp ...` 做 PPO。每一轮用的参数见 `python/garrison_rl/runs/run_sp*.sh`。这些脚本里写的是开发机上的绝对路径，使用前需要改成自己的。
 
 - 可以从 Releases 里的 `sp_bc.pt` 出发（`--init path/to/sp_bc.pt`）。
-- 接着 sp3 继续训练还需要它的评价网络存档（`--init-critic`），目前没有放到 Releases。
+- 接着 sp3 继续训练：`--init path/to/sp3.pt --init-critic path/to/sp3_critic.pt`，两个文件都在 Releases。
 - 没有 CUDA 时会自动改用 CPU，并打印提示。
 
 ## 训练好的模型
@@ -173,6 +173,7 @@ python sp_spec.py      # 写出 runs/sp_bc/spec.json，评估和训练都要用
 | `sp_bc.pt` | 模仿模拟器自带 AI 得到的起点 |
 | `sp2.pt` | 在起点上做 PPO，300 次更新。训练时策略由自带 AI 自选，没有指定盟约 |
 | `sp3.pt` | 在 sp2 上继续 150 次更新，训练时固定三个策略并指定主盟约。目前最好的模型 |
+| `sp3_critic.pt` | sp3 的评价网络（critic），只在接着 sp3 继续训练时需要，评估用不到 |
 
 存档只和训练时的模拟器版本（上面的提交号）配套：干员、盟约、装备的编号顺序来自那个版本。使用前先生成一份目录文件，再评估：
 
