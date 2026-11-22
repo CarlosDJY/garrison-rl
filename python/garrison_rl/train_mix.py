@@ -209,12 +209,25 @@ def mem_str():
     """This process's committed memory (+ its children: the gyms), what torch holds on the GPU (on Windows that counts
     as committed memory too: allocated / reserved / peak reserved), and the machine's commit against its limit."""
     import psutil
+
+    def own(p):
+        # "private" (committed) exists on Windows only; elsewhere the resident size stands in
+        try:
+            m = p.memory_info()
+            return getattr(m, "private", m.rss)
+        except psutil.Error:
+            return 0
+
     me = psutil.Process()
-    priv = me.memory_info().private / 2**30
-    kids = sum(c.memory_info().private for c in me.children(recursive=True)) / 2**30
+    priv = own(me) / 2**30
+    kids = sum(own(c) for c in me.children(recursive=True)) / 2**30
     used, limit = system_commit()
-    return (f"mem {priv:.1f}+{kids:.1f}G gpu {torch.cuda.memory_allocated() / 2**30:.1f}/{torch.cuda.memory_reserved() / 2**30:.1f}"
-            f"/{torch.cuda.max_memory_reserved() / 2**30:.1f}G sys {used:.1f}/{limit:.1f}G")
+    if used != used:  # not Windows: RAM in use against RAM
+        vm = psutil.virtual_memory()
+        used, limit = (vm.total - vm.available) / 2**30, vm.total / 2**30
+    gpu = (f"{torch.cuda.memory_allocated() / 2**30:.1f}/{torch.cuda.memory_reserved() / 2**30:.1f}/{torch.cuda.max_memory_reserved() / 2**30:.1f}G"
+           if torch.cuda.is_available() and torch.cuda.device_count() else "-")
+    return f"mem {priv:.1f}+{kids:.1f}G gpu {gpu} sys {used:.1f}/{limit:.1f}G"
 
 
 def allocate(modes, recent, total, min_envs, opened, target=0.35, spread=0.25):
@@ -356,7 +369,9 @@ def main():
     ap.add_argument("--real-runs", type=int, default=48)
     args = ap.parse_args()
 
-    device = torch.device("cuda")
+    device = torch.device("cuda" if torch.cuda.is_available() and torch.cuda.device_count() else "cpu")
+    if device.type == "cpu":
+        print("没有可用的 CUDA，用 CPU 训练（会慢很多）", flush=True)
     modes = [f"规程等级{x}" for x in args.levels.split(",")]
     run_dir = os.path.join(ROOT, "python", "garrison_rl", "runs", args.tag)
     os.makedirs(run_dir, exist_ok=True)

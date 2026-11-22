@@ -96,31 +96,73 @@
 
 ## 运行
 
-需要：
+### 硬件
+
+主要吃 CPU 和内存，对显卡要求很低。开发机是 i5-13600KF（14 核 20 线程）、48 GB 内存、RTX 5070 Ti，Windows 11。
+
+| | 训练（96 个并行对局） | 只做评估 |
+|---|---|---|
+| CPU | 越多核越快。每次更新约 50 秒，其中约 17 秒在跑模拟器 | 普通 8 核即可 |
+| 内存 | 训练程序约 5.5 GB，模拟器进程合计约 11 GB，建议 32 GB 起步 | 16 GB 即可 |
+| 显卡 | 显存约 2 GB，有 CUDA 的 N 卡就行；没有也能用 CPU 训练，会慢很多 | 不需要 |
+| 硬盘 | 代码很小；训练时记录的对局数据每轮几百 MB（`--sp-fights ""` 可关掉） | 很小 |
+
+内存或核数不够时，把 `--envs`（并行对局数）调小，例如 32 或 48。
+
+参考耗时：一轮 150 次更新约 2.5–3 小时；规程 20 的 512 局评估约 10 分钟。
+
+### 1. 安装软件
 
 - Node 24 或更高（Stronghold-Protocol 的要求）。
-- Python 3.11、PyTorch 2.x（带 CUDA）、NumPy。
-- Stronghold-Protocol 的一份克隆，放在本仓库根目录下并打上补丁。开发时用的是提交 `9a41bbe`：
+- Python 3.11，以及 `pip install torch numpy psutil`。要用显卡的话，按 PyTorch 官网装带 CUDA 的版本。
+- Git。
+
+### 2. 拉代码和模拟器
+
+环境脚本按相对路径找模拟器，所以 Stronghold-Protocol 必须克隆在本仓库的根目录下：
 
 ```bash
+git clone https://github.com/CarlosDJY/garrison-rl.git
+cd garrison-rl
 git clone https://github.com/Stardust-minus/Stronghold-Protocol.git
 cd Stronghold-Protocol
 git checkout 9a41bbe98255a70cf874814245493fa98cf019bb
 git apply ../sp-gym/patches/0001-export-prep-preamble.patch
+cd ..
 ```
 
-无需 `npm install`，无界面运行不依赖第三方包。
+- 要用这个提交号的版本：模型存档里干员、盟约、装备的编号顺序来自它。
+- 无需 `npm install`，无界面运行不依赖第三方包。
 
-路径通过环境变量指定：
+### 3. 设置环境变量
+
+代码里的默认路径是开发机上的，不设置会找不到 Node 和环境脚本：
 
 ```bash
-export ASP_SIM=sp
-export ASP_SP_NODE=/path/to/node
+export ASP_SP_NODE=/path/to/node                      # node 可执行文件的完整路径
 export ASP_SP_GYM=/path/to/garrison-rl/sp-gym/spgym.mjs
-export ASP_SP_PER_PROC=4
+export ASP_SP_PER_PROC=4                              # 每个 Node 进程跑几局
+export PYTHONIOENCODING=utf-8                         # Windows 上需要，否则中文输出会报错
 ```
 
-之后的流程是：`sp_record.py` 录制自带 AI 的对局，`sp_bc.py` 模仿学习得到起点，`train_mix.py --sim sp ...` 做 PPO。具体参数见 `python/garrison_rl/runs/run_sp*.sh`。这些启动脚本里写的是开发机上的绝对路径，使用前需要改成自己的。
+### 4. 生成编号目录
+
+```bash
+cd python/garrison_rl
+python sp_spec.py      # 写出 runs/sp_bc/spec.json，评估和训练都要用
+```
+
+### 5. 评估
+
+从 Releases 下载模型（见下一节），然后按下一节的命令评估。第一次建议先用小局数（如 `--levels 14 --runs 16`）确认能跑通。
+
+### 6. 训练
+
+完整流程是：`sp_record.py` 录制自带 AI 的对局，`sp_bc.py` 模仿学习得到起点，`train_mix.py --sim sp ...` 做 PPO。每一轮用的参数见 `python/garrison_rl/runs/run_sp*.sh`。这些脚本里写的是开发机上的绝对路径，使用前需要改成自己的。
+
+- 可以从 Releases 里的 `sp_bc.pt` 出发（`--init path/to/sp_bc.pt`）。
+- 接着 sp3 继续训练还需要它的评价网络存档（`--init-critic`），目前没有放到 Releases。
+- 没有 CUDA 时会自动改用 CPU，并打印提示。
 
 ## 训练好的模型
 
